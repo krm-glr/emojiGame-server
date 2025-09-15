@@ -125,7 +125,7 @@ io.on("connection", function (client) {
   })
 })
 
-server.listen(port, function () {
+server.listen(port,"0.0.0.0", function () {
   console.log(`Listening on port ${port}`)
 })
 app.get("/", function (req, res) {
