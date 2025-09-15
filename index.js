@@ -2,9 +2,12 @@ const app = require("express")()
 const server = require("http").createServer(app)
 const io = require("socket.io")(server)
 const port = process.env.PORT || 3000
-
+const { stringSimilarity } = require("string-similarity-js")
 io.on("connection", function (client) {
   console.log(`socket client ${client.id} connected`)
+  client.on("disconnect", function () {
+    console.log(`socket client ${client.id} disconnected`)
+  })
   //
   //host things
   //
@@ -24,14 +27,37 @@ io.on("connection", function (client) {
     io.to(roomId).emit("host-start-game")
     console.log("host start game: " + roomId)
   })
-  client.on("host-get-user-back", (roomId,name,state,data) => {
-    io.to(roomId).emit("host-get-user-back", name,state,data)
+  client.on("host-get-user-back", (roomId, name, state, data) => {
+    io.to(roomId).emit("host-get-user-back", name, state, data)
   })
-  client.on("host-send-cards", (roomId,name,payload) => {
-    io.to(roomId).emit("host-send-cards", name,payload)
-    console.log("host send cards: " + payload+ " to " + name)
+  client.on("host-send-cards", (roomId, name, payload) => {
+    io.to(roomId).emit("host-send-cards", name, payload)
+    console.log("host send cards: " + payload + " to " + name)
   })
-  
+  client.on("host-receive-first-emoji", (roomId, name, payload) => {
+    io.to(roomId).emit("host-receive-first-emoji", name, payload)
+  })
+  client.on("host-receive-new-emoji", (roomId, name, payload) => {
+    io.to(roomId).emit("host-receive-new-emoji", name, payload)
+  })
+  client.on("host-send-guess-to-server", (roomId, name, guess, answer) => {
+    correct = false
+    //replace punctuation with space
+    guess = guess.replace(/[^a-zA-Z0-9\s]/g, " ")
+    answer = answer.replace(/[^a-zA-Z0-9\s]/g, " ")
+    if (answer != null || guess != null) {
+      console.log(
+        guess + " and " + answer + " " + stringSimilarity(guess, answer)
+      )
+      if (stringSimilarity(guess, answer) > 0.85) {
+        correct = true
+      }
+      io.to(roomId).emit("server-eval-guess", name, guess, correct)
+    }
+  })
+  client.on("host-end-game", (roomId) => {
+    io.to(roomId).emit("host-end-game")
+  })
   //
   //client things
   //
@@ -75,6 +101,22 @@ io.on("connection", function (client) {
     client.join(roomId)
     io.to(roomId).emit("client-reconnect", name)
     console.log("client " + name + " reconnected to room: " + roomId)
+  })
+  client.on("client-choose-film", (roomId, name, payload) => {
+    io.to(roomId).emit("client-choose-film", name, payload)
+    console.log("client " + name + " chose film: " + payload)
+  })
+  client.on("client-submit-first-emoji", (roomId, name, payload) => {
+    io.to(roomId).emit("client-submit-first-emoji", name, payload)
+    console.log("client " + name + " submitted first emoji: " + payload)
+  })
+  client.on("client-submit-emoji", (roomId, name, payload) => {
+    io.to(roomId).emit("client-submit-emoji", name, payload)
+    console.log("client " + name + " submitted new emoji: " + payload)
+  })
+  client.on("client-submit-guess", (roomId, name, payload) => {
+    io.to(roomId).emit("client-submit-guess", name, payload)
+    console.log("client " + name + " submitted guess: " + payload)
   })
 })
 
