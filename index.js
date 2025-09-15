@@ -56,7 +56,7 @@ io.on("connection", function (client) {
     }
   })
   client.on("host-end-game", (roomId) => {
-    io.to(roomId).emit("host-end-game")
+    io.to(roomId).emit("host-end-game") 
   })
   //
   //client things
