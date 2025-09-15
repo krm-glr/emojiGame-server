@@ -1,12 +1,20 @@
 const app = require("express")()
-const server = require("http").createServer(app)
-const io = require("socket.io")(server,{
+const fs = require("fs")
+const https = require("https")
+const server = https.createServer(
+  {
+    key: fs.readFileSync("/etc/letsencrypt/live/emoji-game-server.mooo.com/privkey.pem"),
+    cert: fs.readFileSync("/etc/letsencrypt/live/emoji-game-server.mooo.com/fullchain.pem"),
+  },
+  app
+)
+const io = require("socket.io")(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"],
   },
 })
-const port = process.env.PORT || 3000
+const port = 443
 const { stringSimilarity } = require("string-similarity-js")
 io.on("connection", function (client) {
   console.log(`socket client ${client.id} connected`)
@@ -61,7 +69,7 @@ io.on("connection", function (client) {
     }
   })
   client.on("host-end-game", (roomId) => {
-    io.to(roomId).emit("host-end-game") 
+    io.to(roomId).emit("host-end-game")
   })
   //
   //client things
@@ -125,7 +133,7 @@ io.on("connection", function (client) {
   })
 })
 
-server.listen(port,"0.0.0.0", function () {
+server.listen(port, "0.0.0.0", function () {
   console.log(`Listening on port ${port}`)
 })
 app.get("/", function (req, res) {
