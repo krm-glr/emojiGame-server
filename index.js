@@ -1,6 +1,11 @@
 const app = require("express")()
 const server = require("http").createServer(app)
-const io = require("socket.io")(server)
+const io = require("socket.io")(server,{
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"],
+  },
+})
 const port = process.env.PORT || 3000
 const { stringSimilarity } = require("string-similarity-js")
 io.on("connection", function (client) {
@@ -122,4 +127,7 @@ io.on("connection", function (client) {
 
 server.listen(port, function () {
   console.log(`Listening on port ${port}`)
+})
+app.get("/", function (req, res) {
+  res.send("Seems good?")
 })
