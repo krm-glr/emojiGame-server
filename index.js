@@ -1,21 +1,44 @@
 const app = require("express")()
 const fs = require("fs")
 const https = require("https")
-const server = https.createServer(
-  {
-    key: fs.readFileSync("/etc/letsencrypt/live/emoji-game-server.mooo.com/privkey.pem"),
-    cert: fs.readFileSync("/etc/letsencrypt/live/emoji-game-server.mooo.com/fullchain.pem"),
-  },
-  app
-)
+const http = require("http")
+const { stringSimilarity } = require("string-similarity-js")
+
+// Determine environment
+const isDevelopment = process.env.NODE_ENV !== 'production'
+//const port = 443
+const config = {
+  port: process.env.PORT || (isDevelopment ? 3000 : 443),
+  host: isDevelopment ? 'localhost' : '0.0.0.0',
+  corsOrigin: process.env.CORS_ORIGIN || '*'
+}
+
+
+let server
+if (isDevelopment) {
+  // HTTP server for local development
+  server = http.createServer(app)
+  console.log('Running in DEVELOPMENT mode (HTTP)')
+} else {
+  // HTTPS server for production
+  server = https.createServer(
+    {
+      key: fs.readFileSync("/etc/letsencrypt/live/emoji-game-server.mooo.com/privkey.pem"),
+      cert: fs.readFileSync("/etc/letsencrypt/live/emoji-game-server.mooo.com/fullchain.pem"),
+    },
+    app
+  )
+  console.log('Running in PRODUCTION mode (HTTPS)')
+}
+
 const io = require("socket.io")(server, {
   cors: {
-    origin: "*",
+    origin: config.corsOrigin,
     methods: ["GET", "POST"],
   },
 })
-const port = 443
-const { stringSimilarity } = require("string-similarity-js")
+
+
 io.on("connection", function (client) {
   console.log(`socket client ${client.id} connected`)
   client.on("disconnect", function () {
@@ -133,8 +156,10 @@ io.on("connection", function (client) {
   })
 })
 
-server.listen(port, "0.0.0.0", function () {
-  console.log(`Listening on port ${port}`)
+server.listen(config.port, config.host, function () {
+  const protocol = isDevelopment ? 'http' : 'https'
+  const host = isDevelopment ? 'localhost' : config.host
+  console.log(`Listening on ${protocol}://${host}:${config.port}`)
 })
 app.get("/", function (req, res) {
   res.send("Seems good?")
