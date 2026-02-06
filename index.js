@@ -5,30 +5,33 @@ const http = require("http")
 const { stringSimilarity } = require("string-similarity-js")
 
 // Determine environment
-const isDevelopment = process.env.NODE_ENV !== 'production'
+const isDevelopment = process.env.NODE_ENV !== "production"
 //const port = 443
 const config = {
   port: process.env.PORT || (isDevelopment ? 3000 : 443),
-  host: isDevelopment ? 'localhost' : '0.0.0.0',
-  corsOrigin: process.env.CORS_ORIGIN || '*'
+  host: isDevelopment ? "localhost" : "0.0.0.0",
+  corsOrigin: process.env.CORS_ORIGIN || "*",
 }
-
 
 let server
 if (isDevelopment) {
   // HTTP server for local development
   server = http.createServer(app)
-  console.log('Running in DEVELOPMENT mode (HTTP)')
+  console.log("Running in DEVELOPMENT mode (HTTP)")
 } else {
   // HTTPS server for production
   server = https.createServer(
     {
-      key: fs.readFileSync("/etc/letsencrypt/live/emoji-game-server.mooo.com/privkey.pem"),
-      cert: fs.readFileSync("/etc/letsencrypt/live/emoji-game-server.mooo.com/fullchain.pem"),
+      key: fs.readFileSync(
+        "/etc/letsencrypt/live/emoji-game-server.mooo.com/privkey.pem"
+      ),
+      cert: fs.readFileSync(
+        "/etc/letsencrypt/live/emoji-game-server.mooo.com/fullchain.pem"
+      ),
     },
     app
   )
-  console.log('Running in PRODUCTION mode (HTTPS)')
+  console.log("Running in PRODUCTION mode (HTTPS)")
 }
 
 const io = require("socket.io")(server, {
@@ -36,22 +39,38 @@ const io = require("socket.io")(server, {
     origin: config.corsOrigin,
     methods: ["GET", "POST"],
   },
+  reconnection: false,
 })
-
+let rooms = {}
 
 io.on("connection", function (client) {
   console.log(`socket client ${client.id} connected`)
   client.on("disconnect", function () {
     console.log(`socket client ${client.id} disconnected`)
+
   })
   //
   //host things
   //
-  client.on("host-create-room", (roomId) => {
+  client.on("host-bye", () => {
+    console.log("host bye")
+  })
+
+  client.on("host-create-room", () => {
+
+    var roomId = Math.floor(1000 + Math.random() * 9000)
+    while (io.sockets.adapter.rooms.has(roomId)) {
+      roomId = Math.floor(1000 + Math.random() * 9000)
+    }
+    rooms[roomId] = []
+    client.emit("server-present-room", roomId)
     console.log("host create room: " + roomId)
+
     client.join(roomId)
+    console.log(io.sockets.adapter.rooms)
   })
   client.on("host-welcome-user", (roomId, name) => {
+    rooms[roomId].push(name)
     io.to(roomId).emit("host-welcome-user", name)
     console.log("host welcome user: " + name)
   })
@@ -76,6 +95,9 @@ io.on("connection", function (client) {
   client.on("host-receive-new-emoji", (roomId, name, payload) => {
     io.to(roomId).emit("host-receive-new-emoji", name, payload)
   })
+  client.on("host-teller-failed", (roomId) => {
+    io.to(roomId).emit("host-teller-failed")
+  })
   client.on("host-send-guess-to-server", (roomId, name, guess, answer) => {
     correct = false
     //replace punctuation with space
@@ -91,6 +113,7 @@ io.on("connection", function (client) {
       io.to(roomId).emit("server-eval-guess", name, guess, correct)
     }
   })
+
   client.on("host-end-game", (roomId) => {
     io.to(roomId).emit("host-end-game")
   })
@@ -157,8 +180,8 @@ io.on("connection", function (client) {
 })
 
 server.listen(config.port, config.host, function () {
-  const protocol = isDevelopment ? 'http' : 'https'
-  const host = isDevelopment ? 'localhost' : config.host
+  const protocol = isDevelopment ? "http" : "https"
+  const host = isDevelopment ? "localhost" : config.host
   console.log(`Listening on ${protocol}://${host}:${config.port}`)
 })
 app.get("/", function (req, res) {
