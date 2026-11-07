@@ -45,9 +45,16 @@ let rooms = {}
 
 io.on("connection", function (client) {
   console.log(`socket client ${client.id} connected`)
-  client.on("disconnect", function () {
+  client.on("disconnect", async function () {
     console.log(`socket client ${client.id} disconnected`)
-
+    if (client.data.isHost) {
+      io.to(client.data.roomId).emit("host-end-game")
+      const sockets = await io.in(client.data.roomId).fetchSockets()
+      sockets.forEach((socket) => {
+        socket.leave(client.data.roomId)
+      })
+    }
+    console.log(io.sockets.adapter.rooms)
   })
   //
   //host things
@@ -57,9 +64,8 @@ io.on("connection", function (client) {
   })
 
   client.on("host-create-room", () => {
-
     var roomId = Math.floor(1000 + Math.random() * 9000)
-    while (io.sockets.adapter.rooms.has(roomId)) {
+    while (io.sockets.adapter.rooms.has(parseInt(roomId))) {
       roomId = Math.floor(1000 + Math.random() * 9000)
     }
     rooms[roomId] = []
@@ -67,10 +73,13 @@ io.on("connection", function (client) {
     console.log("host create room: " + roomId)
 
     client.join(roomId)
+    client.data.isHost = true
+    client.data.roomId = roomId
     console.log(io.sockets.adapter.rooms)
   })
+
   client.on("host-welcome-user", (roomId, name) => {
-    rooms[roomId].push(name)
+    //rooms[roomId].push(name)
     io.to(roomId).emit("host-welcome-user", name)
     console.log("host welcome user: " + name)
   })
@@ -78,12 +87,15 @@ io.on("connection", function (client) {
     io.to(roomId).emit("host-disown-user", roomId, name)
     console.log("host disowned user: " + name)
   })
+
+  client.on("host-get-user-back", (roomId, name, state, data) => {
+    console.log("host get user back: " + name)
+    io.to(roomId).emit("host-get-user-back", roomId, name, state, data)
+  })
+
   client.on("host-start-game", (roomId) => {
     io.to(roomId).emit("host-start-game")
     console.log("host start game: " + roomId)
-  })
-  client.on("host-get-user-back", (roomId, name, state, data) => {
-    io.to(roomId).emit("host-get-user-back", name, state, data)
   })
   client.on("host-send-cards", (roomId, name, payload) => {
     io.to(roomId).emit("host-send-cards", name, payload)
@@ -120,54 +132,78 @@ io.on("connection", function (client) {
   //
   //client things
   //
-  client.on("client-check-room", (roomId) => {
-    console.log("client check room: " + roomId)
-    if (!io.sockets.adapter.rooms.has(roomId)) {
-      client.emit("no-room")
-      console.log("no room found")
-      console.log(io.sockets.adapter.rooms)
+
+  // client.on("client-check-room", (roomId) => {
+  //   console.log("client check room: " + roomId)
+  //   if (!io.sockets.adapter.rooms.has(parseInt(roomId))) {
+  //     client.emit("no-room")
+  //     console.log("no room found")
+  //     console.log(io.sockets.adapter.rooms)
+  //   } else {
+  //     client.emit("room-found")
+  //   }
+  // })
+  client.on("client-join-room", (roomId, name) => {
+    // console.log("client join room: " + roomId + " " + name)
+    if (!io.sockets.adapter.rooms.has(parseInt(roomId))) {
+      client.emit("server-room-not-active")
+      //console.log(io.sockets.adapter.rooms)
     } else {
-      client.emit("room-found")
+      client.join(roomId)
+      io.to(roomId).emit("client-join-room", roomId, name)
     }
+
+    // client.join(roomId)
+    // console.log("client " + name + " requested join room: " + roomId)
+    // io.to(roomId).emit("client-join-room", roomId, name)
   })
   client.on("client-propose-reconnect", (roomId) => {
     //check if game still exists
     console.log("client proposed reconnect room: " + roomId)
     if (io.sockets.adapter.rooms.has(parseInt(roomId))) {
       client.join(roomId)
-      client.emit("room-active")
+      io.to(client.id).emit("room-active")
     } else {
-      client.emit("room-not-active")
+      io.to(client.id).emit("server-room-not-active")
       console.log("room not active")
       console.log(io.sockets.adapter.rooms)
     }
   })
-  client.on("client-join-room", (roomId, name) => {
-    client.join(roomId)
-    console.log("client " + name + " requested join room: " + roomId)
-    io.to(roomId).emit("client-join-room", roomId, name)
-  })
+
   client.on("client-disowned", (roomId, name) => {
     client.leave(roomId)
     console.log("client disowned: " + name + " in room: " + roomId)
   })
   client.on("client-leave-room", (roomId, name) => {
-    io.to(roomId).emit("client-leave-room", name)
     console.log("client " + name + " left room: " + roomId)
+    client.to(roomId).emit("client-leave-room", name)
+    console.log(io.sockets.adapter.rooms)
     client.leave(roomId)
+    console.log(io.sockets.adapter.rooms)
   })
   client.on("client-reconnect", (roomId, name) => {
-    client.join(roomId)
-    io.to(roomId).emit("client-reconnect", name)
-    console.log("client " + name + " reconnected to room: " + roomId)
+    console.log("client " + name + " requested reconnect to room: " + roomId)
+
+    if (!io.sockets.adapter.rooms.has(parseInt(roomId))) {
+      console.log("room not active:" + roomId)
+      client.emit("server-room-not-active")
+    } else {
+      client.join(roomId)
+      io.to(roomId).emit("client-reconnect", roomId, name)
+      console.log("client " + name + " emitted reconnect to room: " + roomId)
+    }
+    // io.to(roomId).emit("client-reconnect", name)
+    // console.log("client " + name + " reconnected to room: " + roomId)
   })
-  client.on("client-choose-film", (roomId, name, payload) => {
-    io.to(roomId).emit("client-choose-film", name, payload)
-    console.log("client " + name + " chose film: " + payload)
+
+  client.on("client-choose-card", (roomId, name, payload) => {
+    io.to(roomId).emit("client-choose-card", name, payload)
+    console.log("client " + name + " chose card: " + payload)
   })
   client.on("client-submit-first-emoji", (roomId, name, payload) => {
     io.to(roomId).emit("client-submit-first-emoji", name, payload)
     console.log("client " + name + " submitted first emoji: " + payload)
+    console.log(io.sockets.adapter.rooms)
   })
   client.on("client-submit-emoji", (roomId, name, payload) => {
     io.to(roomId).emit("client-submit-emoji", name, payload)
